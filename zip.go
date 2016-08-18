@@ -1,17 +1,21 @@
-package gcloudzip
+package gcloudz
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/appengine/log"
 	"google.golang.org/cloud"
 	"google.golang.org/cloud/storage"
 	"io"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
+)
+
+var (
+	ErrNoFilesFound = errors.New("No files found in folder")
 )
 
 type ZipRequest struct {
@@ -58,11 +62,9 @@ func NewWithBucket(c context.Context, bucket *storage.BucketHandle) *ZipRequest 
 }
 
 // Pack a folder into zip file
-func (r *ZipRequest) Zip(srcFolder string, fileName string, contentType string, metaData *map[string]string) bool {
+func (r *ZipRequest) Zip(srcFolder string, fileName string, contentType string, metaData *map[string]string) error {
 	c := r.context
 	bucket := r.bucket
-
-	log.Infof(c, "Packing bucket %v folder %v to file %v", bucket, srcFolder, fileName)
 
 	srcFolder = fmt.Sprintf("%v/", srcFolder)
 	query := &storage.Query{Prefix: srcFolder, Delimiter: "/"}
@@ -72,18 +74,15 @@ func (r *ZipRequest) Zip(srcFolder string, fileName string, contentType string, 
 
 	objs, err := bucket.List(c, query)
 	if err != nil {
-		log.Errorf(c, "Packing failed to list bucket %q: %v", r.bucket, err)
-		return false
+		return err
 	}
 
 	totalFiles := len(objs.Results)
 	if totalFiles == 0 {
-		log.Errorf(c, "Packing failed to find objects found in folder %q: %v", bucket, srcFolder)
-		return false
+		return ErrNoFilesFound
 	}
 
 	// create storage file for writing
-	log.Infof(c, "Writing new zip file to %v/%v for %v files", bucket, fileName, totalFiles)
 	storageWriter := bucket.Object(fileName).NewWriter(c)
 	defer storageWriter.Close()
 
@@ -101,14 +100,10 @@ func (r *ZipRequest) Zip(srcFolder string, fileName string, contentType string, 
 	// go through each file in the folder
 	for _, obj := range objs.Results {
 
-		log.Infof(c, "Packing file %v of size %v to zip file", obj.Name, obj.Size)
-		//d.dumpStats(obj)
-
 		// read file in our source folder from storage - io.ReadCloser returned from storage
 		storageReader, err := bucket.Object(obj.Name).NewReader(c)
 		if err != nil {
-			log.Errorf(c, "Packing failed to read from bucket %q file %q: %v", bucket, obj.Name, err)
-			return false
+			return err
 		}
 		defer storageReader.Close()
 
@@ -119,27 +114,22 @@ func (r *ZipRequest) Zip(srcFolder string, fileName string, contentType string, 
 		// add filename to zip
 		zipFile, err := zipWriter.Create(newFileName)
 		if err != nil {
-			log.Errorf(c, "Packing failed to create zip file from bucket %q file %q: %v", bucket, zipFileName, err)
-			return false
+			return err
 		}
 
 		// copy from storage reader to zip writer
 		_, err = io.Copy(zipFile, storageReader)
 		if err != nil {
-			log.Errorf(c, "Failed to copy from storage reader to zip file: %v", err)
-			return false
+			return err
 		}
 	}
 
 	// Make sure to check the error on Close.
-	log.Infof(c, "Closing zip writer")
 	err = zipWriter.Close()
 	if err != nil {
-		log.Errorf(c, "Packing failed to close zip file writer from bucket %q file %q : %v", bucket, fileName, err)
-		return false
+		return err
 	}
 
 	// success!
-	log.Infof(c, "Packed files to new cloud storage file %v successful!", fileName)
-	return true
+	return nil
 }
