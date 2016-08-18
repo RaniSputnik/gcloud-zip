@@ -23,7 +23,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	if err := zipper.Zip("MyFirstGame", "MyFirstGame.love", "application/x-love-game", nil); err != nil {
+	if err := zipper.Zip("TheGame", "TheGame.love", "application/x-love-game", nil); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	} else {
 		w.WriteHeader(http.StatusOK)
