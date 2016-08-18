@@ -6,6 +6,11 @@ zipper, err := gcloudz.NewWithBucketNamed(ctx, "mybucket.mysite.com")
 zipper.Zip("MyFolder", "MyFolder.zip", "application/zip", metadata);
 ```
 
+The sample above will load all the files inside of MyFolder, then output them to a zip archive at MyFolder.zip in the bucket. All file paths are relative to the base path of the bucket, you can optionally set the content type and attach metadata too.
+
+----
+
+
 An extended example;
 ```
 import (
